@@ -7,16 +7,16 @@ import { SettingsModal } from './components/SettingsModal';
 import { useCountdown } from './hooks/useCountdown';
 import { useTvNavigation } from './hooks/useTvNavigation';
 import { 
-  fetchEventConfig, 
-  saveEventConfig, 
-  resetEventConfig, 
+  fetchCountdownState, 
+  saveCountdownState, 
   requestWakeLock, 
   releaseWakeLock, 
-  CountdownEvent 
+  CountdownState,
+  CountdownEvent
 } from './utils/helpers';
 
 const App: React.FC = () => {
-  const [event, setEvent] = useState<CountdownEvent | null>(null);
+  const [state, setState] = useState<CountdownState | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [wakeLockActive, setWakeLockActive] = useState(false);
@@ -24,8 +24,8 @@ const App: React.FC = () => {
   // 1. Initial Data Fetching & Wake Lock Setup
   useEffect(() => {
     const initApp = async () => {
-      const config = await fetchEventConfig();
-      setEvent(config);
+      const configState = await fetchCountdownState();
+      setState(configState);
       
       // Request screen wake lock to prevent TV sleeping
       const lockAcquired = await requestWakeLock();
@@ -47,29 +47,28 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Find the currently active event to run the countdown for
+  const activeEvent: CountdownEvent | null = state 
+    ? (state.events.find(e => e.id === state.activeEventId) || state.events[0])
+    : null;
+
   // 2. Countdown calculation hook
-  const timeLeft = useCountdown(event?.targetDate || new Date().toISOString());
+  const timeLeft = useCountdown(activeEvent?.targetDate || new Date().toISOString());
 
   // 3. Register TV spatial navigation listeners
-  // If settings modal is open, navigation handles modal elements.
-  // We handle modal closing (Escape) and opening (Enter when focused).
   useTvNavigation({
     active: true, // Always listen to arrow key focus movements
     onEscape: () => {
       if (isSettingsOpen) {
         setIsSettingsOpen(false);
       }
-    },
-    onEnter: () => {
-      // Custom TV Enter hooks if required
     }
   });
 
-  // Global Remote shortcuts: Enter key opens settings, Escape closes settings
+  // Global Remote shortcuts: Enter key opens settings when nothing is focused
   useEffect(() => {
     const handleGlobalKeys = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && !isSettingsOpen && document.activeElement === document.body) {
-        // If nothing is focused and Enter is pressed, open settings immediately
         setIsSettingsOpen(true);
       }
     };
@@ -77,17 +76,10 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeys);
   }, [isSettingsOpen]);
 
-  // 4. Save/Reset handler callbacks
-  const handleSaveSettings = async (updatedEvent: CountdownEvent) => {
-    setEvent(updatedEvent);
-    setIsSettingsOpen(false);
-    await saveEventConfig(updatedEvent);
-  };
-
-  const handleResetSettings = async () => {
-    const resetEvent = await resetEventConfig();
-    setEvent(resetEvent);
-    setIsSettingsOpen(false);
+  // 4. Save handler callbacks
+  const handleSaveState = async (updatedState: CountdownState) => {
+    setState(updatedState);
+    await saveCountdownState(updatedState);
   };
 
   // 5. Fullscreen action trigger
@@ -102,10 +94,10 @@ const App: React.FC = () => {
     }
   };
 
-  if (!event) {
+  if (!state || !activeEvent) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-[#0a0a0e] text-white">
-        <Tv className="w-12 h-12 text-blue-500 animate-bounce mb-4" />
+        <Tv className="w-12 h-12 text-blue-500 animate-pulse mb-4" />
         <p className="text-lg font-medium tracking-widest text-gray-400 animate-pulse uppercase">
           Initializing TV Application...
         </p>
@@ -117,12 +109,12 @@ const App: React.FC = () => {
     <div className="relative w-full h-full flex flex-col justify-between overflow-hidden px-tv-safe py-tv-safe select-none text-white">
       {/* Cinematic Dynamic Background Layer */}
       <BackgroundLayer 
-        backgroundImageUrl={event.backgroundImageUrl}
-        backgroundVideoUrl={event.backgroundVideoUrl}
+        backgroundImageUrl={activeEvent.backgroundImageUrl}
+        backgroundVideoUrl={activeEvent.backgroundVideoUrl}
       />
 
       {/* Top Header Section */}
-      <HeaderTitle title={event.title} isFinished={timeLeft.isFinished} />
+      <HeaderTitle title={activeEvent.title} isFinished={timeLeft.isFinished} />
 
       {/* Main Center Area: Large Countdown Display */}
       <div className="flex-1 flex items-center justify-center my-6">
@@ -197,9 +189,8 @@ const App: React.FC = () => {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        onSave={handleSaveSettings}
-        onReset={handleResetSettings}
-        currentEvent={event}
+        onSaveState={handleSaveState}
+        currentState={state}
       />
     </div>
   );

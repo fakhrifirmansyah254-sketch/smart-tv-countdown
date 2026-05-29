@@ -1,13 +1,18 @@
 /**
- * Smart TV Countdown helper functions
+ * Smart TV Countdown helper functions - Multiple Deadlines Support
  */
 
-// Interface for Countdown Event data
 export interface CountdownEvent {
+  id: string;
   title: string;
   targetDate: string; // ISO string
   backgroundImageUrl?: string;
   backgroundVideoUrl?: string;
+}
+
+export interface CountdownState {
+  events: CountdownEvent[];
+  activeEventId: string;
 }
 
 // Request and maintain a Screen Wake Lock to prevent the Smart TV from sleeping
@@ -56,52 +61,79 @@ export const formatTimeNumber = (num: number): string => {
   return num.toString().padStart(2, '0');
 };
 
-// Default countdown target (e.g. New Year of next year)
-export const getDefaultEvent = (): CountdownEvent => {
+// Default countdown state (e.g. New Year of next year)
+export const getDefaultState = (): CountdownState => {
   const nextYear = new Date().getFullYear() + 1;
   const newYear = new Date(nextYear, 0, 1, 0, 0, 0);
-  return {
+  const defaultEvent: CountdownEvent = {
+    id: "default-newyear",
     title: "New Year's Eve Countdown",
     targetDate: newYear.toISOString(),
     backgroundImageUrl: "",
     backgroundVideoUrl: ""
   };
+  return {
+    events: [defaultEvent],
+    activeEventId: defaultEvent.id
+  };
 };
 
-// Fetch event config from API with LocalStorage fallback
-export const fetchEventConfig = async (): Promise<CountdownEvent> => {
+// Fetch countdown state from API with LocalStorage fallback
+export const fetchCountdownState = async (): Promise<CountdownState> => {
   try {
     const response = await fetch('/api/event');
     if (response.ok) {
       const data = await response.json();
+      
+      // Handle legacy single-event structure migrations if cached locally
+      const migrated = migrateLegacyState(data);
+      
       // Cache in localStorage as backup
-      localStorage.setItem('tv_countdown_event', JSON.stringify(data));
-      return data;
+      localStorage.setItem('tv_countdown_state', JSON.stringify(migrated));
+      return migrated;
     }
   } catch (error) {
     console.warn("Backend API not reachable. Falling back to cached local storage:", error);
   }
 
   // Fallback to LocalStorage cache
-  const cached = localStorage.getItem('tv_countdown_event');
+  const cached = localStorage.getItem('tv_countdown_state');
   if (cached) {
     try {
-      return JSON.parse(cached);
+      return migrateLegacyState(JSON.parse(cached));
     } catch (e) {
       console.error("Error parsing cached event data:", e);
     }
   }
 
-  // Fallback to standard default event
-  const defaultEvent = getDefaultEvent();
-  localStorage.setItem('tv_countdown_event', JSON.stringify(defaultEvent));
-  return defaultEvent;
+  // Fallback to standard default event state
+  const defaultState = getDefaultState();
+  localStorage.setItem('tv_countdown_state', JSON.stringify(defaultState));
+  return defaultState;
 };
 
-// Save event config to API with LocalStorage replication
-export const saveEventConfig = async (event: CountdownEvent): Promise<boolean> => {
+// Helper function to migrate legacy single-event config if encountered
+const migrateLegacyState = (data: any): CountdownState => {
+  if (data && typeof data === 'object' && !data.events) {
+    const migratedEvent: CountdownEvent = {
+      id: "migrated-legacy-event",
+      title: data.title || "My Countdown Event",
+      targetDate: data.targetDate || new Date().toISOString(),
+      backgroundImageUrl: data.backgroundImageUrl || "",
+      backgroundVideoUrl: data.backgroundVideoUrl || ""
+    };
+    return {
+      events: [migratedEvent],
+      activeEventId: migratedEvent.id
+    };
+  }
+  return data as CountdownState;
+};
+
+// Save countdown state to API with LocalStorage replication
+export const saveCountdownState = async (state: CountdownState): Promise<boolean> => {
   // Sync to local storage immediately
-  localStorage.setItem('tv_countdown_event', JSON.stringify(event));
+  localStorage.setItem('tv_countdown_state', JSON.stringify(state));
 
   try {
     const response = await fetch('/api/event', {
@@ -109,23 +141,23 @@ export const saveEventConfig = async (event: CountdownEvent): Promise<boolean> =
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(event),
+      body: JSON.stringify(state),
     });
 
     if (response.ok) {
-      console.log('Event synced to server successfully');
+      console.log('Countdown state synced to server successfully');
       return true;
     }
   } catch (error) {
-    console.warn('Could not sync event to server backend, saved locally in browser:', error);
+    console.warn('Could not sync state to server backend, saved locally in browser:', error);
   }
   return false;
 };
 
-// Reset event config
-export const resetEventConfig = async (): Promise<CountdownEvent> => {
-  const defaultEvent = getDefaultEvent();
-  localStorage.setItem('tv_countdown_event', JSON.stringify(defaultEvent));
+// Reset countdown state
+export const resetCountdownState = async (): Promise<CountdownState> => {
+  const defaultState = getDefaultState();
+  localStorage.setItem('tv_countdown_state', JSON.stringify(defaultState));
 
   try {
     const response = await fetch('/api/event/reset', {
@@ -138,5 +170,5 @@ export const resetEventConfig = async (): Promise<CountdownEvent> => {
   } catch (error) {
     console.warn('Could not reset server backend, reset applied locally in browser:', error);
   }
-  return defaultEvent;
+  return defaultState;
 };

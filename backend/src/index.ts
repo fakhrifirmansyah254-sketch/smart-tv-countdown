@@ -17,37 +17,71 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Interface for Countdown Event data
+// Interfaces for multiple deadlines
 interface CountdownEvent {
+  id: string;
   title: string;
-  targetDate: string; // ISO string or parsable date string
+  targetDate: string; // ISO string
   backgroundImageUrl?: string;
   backgroundVideoUrl?: string;
 }
 
-// Default countdown target (e.g., 2027 New Year)
-const DEFAULT_EVENT: CountdownEvent = {
-  title: "Next New Year's Celebration",
-  targetDate: new Date(new Date().getFullYear() + 1, 0, 1, 0, 0, 0).toISOString(),
-  backgroundImageUrl: "",
-  backgroundVideoUrl: ""
+interface CountdownState {
+  events: CountdownEvent[];
+  activeEventId: string;
+}
+
+// Default initial state
+const getDefaultState = (): CountdownState => {
+  const defaultEvent: CountdownEvent = {
+    id: "default-newyear",
+    title: "Next New Year's Celebration",
+    targetDate: new Date(new Date().getFullYear() + 1, 0, 1, 0, 0, 0).toISOString(),
+    backgroundImageUrl: "",
+    backgroundVideoUrl: ""
+  };
+  return {
+    events: [defaultEvent],
+    activeEventId: defaultEvent.id
+  };
 };
 
-// Helper function to read the event data
-const readEventData = (): CountdownEvent => {
+// Helper function to read data and perform migrations if necessary
+const readData = (): CountdownState => {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const fileContent = fs.readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(fileContent);
+      const parsed = JSON.parse(fileContent);
+      
+      // Migration check: if old data format (single event, object without "events" array)
+      if (parsed && typeof parsed === 'object' && !parsed.events) {
+        console.log("Migrating legacy single-event data format to multi-event array...");
+        const migratedEvent: CountdownEvent = {
+          id: "migrated-legacy-event",
+          title: parsed.title || "My Countdown Event",
+          targetDate: parsed.targetDate || new Date().toISOString(),
+          backgroundImageUrl: parsed.backgroundImageUrl || "",
+          backgroundVideoUrl: parsed.backgroundVideoUrl || ""
+        };
+        const migratedState = {
+          events: [migratedEvent],
+          activeEventId: migratedEvent.id
+        };
+        // Save the migrated state immediately
+        fs.writeFileSync(DATA_FILE, JSON.stringify(migratedState, null, 2), 'utf-8');
+        return migratedState;
+      }
+      
+      return parsed;
     }
   } catch (error) {
-    console.error("Error reading data file, using default:", error);
+    console.error("Error reading data file, using default state:", error);
   }
-  return DEFAULT_EVENT;
+  return getDefaultState();
 };
 
-// Helper function to write the event data
-const writeEventData = (data: CountdownEvent): boolean => {
+// Helper function to write data
+const writeData = (data: CountdownState): boolean => {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
     return true;
@@ -57,48 +91,50 @@ const writeEventData = (data: CountdownEvent): boolean => {
   }
 };
 
-// GET current event
+// GET current countdown state (list of events + active id)
 app.get('/api/event', (req: Request, res: Response) => {
-  const data = readEventData();
+  const data = readData();
   res.json(data);
 });
 
-// POST save event
+// POST save full countdown state
 app.post('/api/event', (req: Request, res: Response) => {
-  const { title, targetDate, backgroundImageUrl, backgroundVideoUrl } = req.body;
+  const { events, activeEventId } = req.body;
 
-  if (!title || !targetDate) {
-    return res.status(400).json({ error: "Missing required fields: title and targetDate" });
+  if (!events || !Array.isArray(events) || !activeEventId) {
+    return res.status(400).json({ error: "Invalid state format: missing events array or activeEventId" });
   }
 
-  // Validate targetDate is a valid date
-  const parsedDate = new Date(targetDate);
-  if (isNaN(parsedDate.getTime())) {
-    return res.status(400).json({ error: "Invalid targetDate format. Must be a valid date string" });
-  }
+  // Double check elements validation
+  const validatedEvents = events.map((ev: any) => ({
+    id: String(ev.id || Math.random().toString(36).substring(2, 9)),
+    title: String(ev.title || "Unnamed Event").trim(),
+    targetDate: new Date(ev.targetDate).toISOString(),
+    backgroundImageUrl: ev.backgroundImageUrl ? String(ev.backgroundImageUrl).trim() : "",
+    backgroundVideoUrl: ev.backgroundVideoUrl ? String(ev.backgroundVideoUrl).trim() : ""
+  }));
 
-  const updatedData: CountdownEvent = {
-    title: String(title).trim(),
-    targetDate: parsedDate.toISOString(),
-    backgroundImageUrl: backgroundImageUrl ? String(backgroundImageUrl).trim() : "",
-    backgroundVideoUrl: backgroundVideoUrl ? String(backgroundVideoUrl).trim() : ""
+  const updatedState: CountdownState = {
+    events: validatedEvents,
+    activeEventId: String(activeEventId)
   };
 
-  const success = writeEventData(updatedData);
+  const success = writeData(updatedState);
   if (success) {
-    res.json({ message: "Event saved successfully", data: updatedData });
+    res.json({ message: "Countdown state saved successfully", data: updatedState });
   } else {
-    res.status(500).json({ error: "Failed to save event details to disk" });
+    res.status(500).json({ error: "Failed to save state to disk" });
   }
 });
 
 // POST reset event to default
 app.post('/api/event/reset', (req: Request, res: Response) => {
-  const success = writeEventData(DEFAULT_EVENT);
+  const defaultState = getDefaultState();
+  const success = writeData(defaultState);
   if (success) {
-    res.json({ message: "Event reset to default successfully", data: DEFAULT_EVENT });
+    res.json({ message: "Countdown state reset successfully", data: defaultState });
   } else {
-    res.status(500).json({ error: "Failed to reset event details" });
+    res.status(500).json({ error: "Failed to reset settings" });
   }
 });
 
