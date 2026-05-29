@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #0a0a0e;
+    font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Prevent text selection and cursor changes (ideal for TV screens) */
+  * {
+    user-select: none;
+    -webkit-user-drag: none;
+    cursor: default;
+  }
+}
+
+@layer utilities {
+  /* TV Safe margins/paddings (8% horizontal and 6% vertical as per Google TV Guidelines) */
+  .p-tv-safe {
+    padding: 6%;
+  }
+
+  .px-tv-safe {
+    padding-left: 8%;
+    padding-right: 8%;
+  }
+
+  .py-tv-safe {
+    padding-top: 6%;
+    padding-bottom: 6%;
+  }
+
+  /* Glassmorphism styling rules */
+  .glass-card {
+    background: rgba(20, 20, 30, 0.45);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .glass-card-hover {
+    transition: all 0.30s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-card-hover:focus, .glass-card-hover.tv-focused {
+    background: rgba(40, 50, 80, 0.6);
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.4), inset 0 0 10px rgba(59, 130, 246, 0.2);
+    transform: scale(1.03);
+    outline: none;
+  }
+
+  /* Focus glows for input fields and buttons in settings */
+  .tv-input-focus:focus, .tv-input-focus.tv-focused {
+    background: rgba(30, 30, 45, 0.9);
+    border-color: #3b82f6;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+    outline: none;
+  }
+
+  .tv-button-focus:focus, .tv-button-focus.tv-focused {
+    background-color: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+    transform: scale(1.05);
+    outline: none;
+  }
+
+  .tv-button-reset-focus:focus, .tv-button-reset-focus.tv-focused {
+    background-color: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    color: #fca5a5;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    transform: scale(1.05);
+    outline: none;
+  }
+
+  /* Hide default browser scrollbars for clean TV UI */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+
+/* Custom animated background styles */
+.gradient-bg {
+  background: linear-gradient(-45deg, #0f0c1b, #05050f, #160f29, #080d1a);
+  background-size: 400% 400%;
+}
